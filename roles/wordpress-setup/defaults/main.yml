@@ -2,23 +2,17 @@ site_uses_local_db: "{{ site_env.db_host == 'localhost' }}"
 nginx_wordpress_site_conf: wordpress-site.conf.j2
 nginx_ssl_path: "{{ nginx_path }}/ssl"
 
-ssl_default_site:
-  no_default:
-    site_hosts:
-      - canonical: request.is.invalid
-    ssl:
-      enabled: true
-      provider: self-signed
-    multisite: {}
-
 nginx_sites_confs:
   - src: no-default.conf.j2
   - src: ssl.no-default.conf.j2
-    enabled: "{{ sites_use_ssl }}"
+    enabled: false
+
+nginx_http2_enabled: true
+nginx_http3_enabled: false
 
 # HSTS defaults
 nginx_hsts_max_age: 31536000
-nginx_hsts_include_subdomains: true
+nginx_hsts_include_subdomains: false
 nginx_hsts_preload: false
 
 # HSTS helpers
@@ -55,6 +49,7 @@ robots_tag_header: "{{ item.value.robots_tag_header | default({}) }}"
 robots_tag_header_enabled: "{{ robots_tag_header.enabled | default(not_prod) }}"
 
 # PHP FPM
+php_fpm_pm: 'dynamic'
 php_fpm_pm_max_children: 10
 php_fpm_pm_start_servers: 1
 php_fpm_pm_min_spare_servers: 1

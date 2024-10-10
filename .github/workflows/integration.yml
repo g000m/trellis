@@ -11,7 +11,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - run: mkdir $HOME/.ssh
       - name: Remove and cleanup mysql
@@ -20,10 +20,15 @@ jobs:
           sudo apt-get autoremove
           sudo apt-get autoclean
           sudo rm -rf /etc/apparmor.d/abstractions/mysql /etc/apparmor.d/cache/usr.sbin.mysqld /etc/mysql /var/lib/mysql /var/log/mysql* /var/log/upstart/mysql.log* /var/run/mysqld ~/.mysql_history
-      - uses: actions/checkout@v2
+      - name: Remove and cleanup Nginx
+        run: |
+          sudo apt-get remove --purge nginx*
+          sudo apt-get autoremove
+          sudo apt-get autoclean
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
       - uses: ./.github/actions/setup-step-ca
@@ -32,6 +37,7 @@ jobs:
           ansible-vault-password: 'fake'
           auto-init: false
           galaxy-install: false
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
           trellis-directory: '.'
       - name: Create new Trellis project
         run: trellis new --name example.com --host www.example.com --trellis-version ${{ github.sha }} ./example.com
@@ -56,6 +62,9 @@ jobs:
         working-directory: /srv/www/example.com/current
       - name: Verify install
         run: curl -s http://example.com | grep "<title>Example"
+      - name: Deploy previously deployed site
+        run: trellis deploy --extra-vars "web_user=runner project_git_repo=https://github.com/roots/bedrock.git" production example.com
+        working-directory: example.com
       - name: Deploy https site
         run: trellis deploy --extra-vars "web_user=runner project_git_repo=https://github.com/roots/bedrock.git" production example-https.com
         working-directory: example.com

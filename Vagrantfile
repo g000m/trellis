@@ -16,12 +16,8 @@ ensure_plugins(vconfig.fetch('vagrant_plugins')) if vconfig.fetch('vagrant_insta
 
 trellis_config = Trellis::Config.new(root_path: ANSIBLE_PATH)
 
-if Vagrant::Util::Platform.darwin?
-  Vagrant.require_version '>= 2.1.0', '< 2.2.19'
-else
-  Vagrant.require_version '>= 2.1.0'
-end
-  
+Vagrant.require_version vconfig.fetch('vagrant_require_version', '>= 2.1.0')
+
 Vagrant.configure('2') do |config|
   config.vm.box = vconfig.fetch('vagrant_box')
   config.vm.box_version = vconfig.fetch('vagrant_box_version')
@@ -90,17 +86,18 @@ Vagrant.configure('2') do |config|
     fail_with_message "vagrant-bindfs missing, please install the plugin with this command:\nvagrant plugin install vagrant-bindfs"
   else
     trellis_config.wordpress_sites.each_pair do |name, site|
-      config.vm.synced_folder local_site_path(site), nfs_path(name), type: 'nfs'
+      config.vm.synced_folder local_site_path(site), nfs_path(name), type: 'nfs', nfs_udp: vconfig.fetch('vagrant_nfs_udp')
       config.bindfs.bind_folder nfs_path(name), remote_site_path(name, site), u: 'vagrant', g: 'www-data', o: 'nonempty'
     end
 
-    config.vm.synced_folder ANSIBLE_PATH, '/ansible-nfs', type: 'nfs'
+    config.vm.synced_folder ANSIBLE_PATH, '/ansible-nfs', type: 'nfs', nfs_udp: vconfig.fetch('vagrant_nfs_udp')
     config.bindfs.bind_folder '/ansible-nfs', ANSIBLE_PATH_ON_VM, o: 'nonempty', p: '0644,a+D'
   end
 
   vconfig.fetch('vagrant_synced_folders', []).each do |folder|
     options = {
       type: folder.fetch('type', 'nfs'),
+      nfs_udp: folder.fetch('nfs_udp', false),
       create: folder.fetch('create', false),
       mount_options: folder.fetch('mount_options', [])
     }
@@ -147,6 +144,10 @@ Vagrant.configure('2') do |config|
       ansible.extra_vars.merge!(extra_vars)
     end
 
+    if local_provisioning?
+      ansible.extra_vars.merge!('vagrant_local_provisioning' => true)
+    end
+
     if !Vagrant::Util::Platform.windows?
       config.trigger.after :up do |trigger|
         # Add Vagrant ssh-config to ~/.ssh/config
@@ -185,6 +186,11 @@ Vagrant.configure('2') do |config|
     prl.cpus = vconfig.fetch('vagrant_cpus')
     prl.memory = vconfig.fetch('vagrant_memory')
     prl.update_guest_tools = true
+
+    # Parallels handles DNS resolution itself when used in conjunction with landrush
+    if Vagrant.has_plugin?('landrush') && trellis_config.multisite_subdomains?
+      config.landrush.guest_redirect_dns = false
+    end
   end
 
   # Hyper-V settings
@@ -194,5 +200,13 @@ Vagrant.configure('2') do |config|
     h.memory = vconfig.fetch('vagrant_memory')
     h.enable_virtualization_extensions = true
     h.linked_clone = true
+  end
+
+  # Libvirt/KVM settings
+  config.vm.provider 'libvirt' do |lv|
+    lv.driver = "kvm"
+    lv.title = config.vm.hostname
+    lv.cpus = vconfig.fetch('vagrant_cpus')
+    lv.memory = vconfig.fetch('vagrant_memory')
   end
 end
